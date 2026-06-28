@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: nakama-admin-windows-exe
+            path: nakama-admin.exe
+            build_args: --bundles nsis
+
+          - os: ubuntu-latest
+            artifact: nakama-admin-linux-appimage
+            path: nakama-admin.AppImage
+            build_args: --bundles appimage
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - run: npm ci
+
+      - name: Build Tauri
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build ${{ matrix.build_args }}
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: cp src-tauri/target/release/tauri-app.exe nakama-admin.exe
+
+      - name: Prepare artifact (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          appimage=$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -1)
+          cp "$appimage" nakama-admin.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Show artifacts
+        run: find artifacts -type f -ls
+
+      # ponytail: softprops/action-gh-release upserts — safe on re-run
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.sha }}
+          name: "Build ${{ github.sha }}"
+          body: |
+            Automated build from commit `${{ github.sha }}` on branch `${{ github.ref_name }}`.
+          files: artifacts/**/*
+          draft: false
+          prerelease: true
+          make_latest: true
