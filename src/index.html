@@ -83,6 +83,21 @@
                 Loading…
               </div>
             </div>
+
+            <!-- Disk usage bar -->
+            <div id="disk-usage" class="disk-usage" style="display:none">
+              <div class="disk-usage-header">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/>
+                </svg>
+                <span class="disk-usage-label">Disk Usage</span>
+                <span class="disk-usage-value" id="disk-usage-value">—</span>
+              </div>
+              <div class="disk-usage-bar-track">
+                <div class="disk-usage-bar-fill" id="disk-usage-bar-fill"></div>
+              </div>
+              <div class="disk-usage-details" id="disk-usage-details"></div>
+            </div>
           </aside>
 
           <!-- ─── MAIN CONTENT ───────────────────────────────── -->

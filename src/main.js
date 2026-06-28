@@ -15,6 +15,7 @@ let adminKey = localStorage.getItem("nakama_admin_key") || "";
 let catalog = { games: [], modpacks: [] };
 let gamesGrouped = {}; // { [title]: { title, versions: [], modpacks: [] } }
 let selectedGameTitle = null;
+let diskQuota = { total_bytes: 0, used_bytes: 0 };
 
 // File Upload paths (from Rust file picker)
 let gameUploadFilePath = null;
@@ -90,6 +91,12 @@ const el = {
 
   // Toast Container
   toastContainer: document.getElementById("toast-container"),
+
+  // Disk Usage
+  diskUsage: document.getElementById("disk-usage"),
+  diskUsageValue: document.getElementById("disk-usage-value"),
+  diskUsageBarFill: document.getElementById("disk-usage-bar-fill"),
+  diskUsageDetails: document.getElementById("disk-usage-details"),
 };
 
 // Start App
@@ -151,17 +158,29 @@ async function refreshCatalog() {
 
   try {
     const cleanUrl = serverUrl.replace(/\/$/, "");
-    const responseText = await invoke("server_request", {
-      method: "GET",
-      url: `${cleanUrl}/query`,
-      apiKey: adminKey,
-      body: null,
-    });
 
-    catalog = JSON.parse(responseText);
+    // Fetch catalog and disk quota in parallel
+    const [catalogText, quotaText] = await Promise.all([
+      invoke("server_request", {
+        method: "GET",
+        url: `${cleanUrl}/query`,
+        apiKey: adminKey,
+        body: null,
+      }),
+      invoke("server_request", {
+        method: "GET",
+        url: `${cleanUrl}/admin/disk-quota`,
+        apiKey: adminKey,
+        body: null,
+      }),
+    ]);
+
+    catalog = JSON.parse(catalogText);
+    diskQuota = JSON.parse(quotaText);
     groupCatalogData();
     updateConnectionStatus(true);
     renderSidebar();
+    renderDiskUsage();
 
     // Re-render selected details if still active
     if (selectedGameTitle && gamesGrouped[selectedGameTitle]) {
@@ -265,6 +284,77 @@ function renderSidebar() {
     `;
     el.gameList.appendChild(emptyState);
   }
+}
+
+function renderDiskUsage() {
+  const { total_bytes, used_bytes } = diskQuota;
+
+  if (total_bytes === 0 || used_bytes === 0) {
+    el.diskUsage.style.display = "none";
+    return;
+  }
+
+  // Calculate used from catalog for breakdown details
+  let totalGamesBytes = 0;
+  let totalModpacksBytes = 0;
+
+  if (catalog.games) {
+    catalog.games.forEach(g => {
+      totalGamesBytes += g.file_size_bytes || 0;
+    });
+  }
+  if (catalog.modpacks) {
+    catalog.modpacks.forEach(m => {
+      totalModpacksBytes += m.file_size_bytes || 0;
+    });
+  }
+
+  el.diskUsage.style.display = "flex";
+
+  // Show "used / total" in the header
+  el.diskUsageValue.textContent = `${formatBytes(used_bytes)} / ${formatBytes(total_bytes)}`;
+
+  // Fill bar proportional to usage vs quota
+  const ratio = Math.min(used_bytes / total_bytes, 1);
+  const percent = Math.round(ratio * 100);
+  const barFill = el.diskUsageBarFill;
+  barFill.className = "disk-usage-bar-fill";
+  barFill.style.width = `${percent}%`;
+
+  // Color by usage ratio: green < 50%, yellow < 80%, orange < 95%, red >= 95%
+  if (ratio < 0.5) {
+    barFill.classList.add("disk-usage-bar-fill--low");
+  } else if (ratio < 0.8) {
+    barFill.classList.add("disk-usage-bar-fill--medium");
+  } else {
+    barFill.classList.add("disk-usage-bar-fill--high");
+  }
+
+  // Build breakdown text
+  const parts = [];
+  if (totalGamesBytes > 0) {
+    parts.push(`<span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>${formatBytes(totalGamesBytes)} games</span>`);
+  }
+  if (totalModpacksBytes > 0) {
+    parts.push(`<span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>${formatBytes(totalModpacksBytes)} modpacks</span>`);
+  }
+
+  // Calculate and display free space
+  const freeBytes = Math.max(total_bytes - used_bytes, 0);
+  let freeStatusClass = "disk-usage-free--success";
+  let freeIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`;
+
+  if (ratio >= 0.8) {
+    freeStatusClass = "disk-usage-free--danger";
+    freeIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+  } else if (ratio >= 0.5) {
+    freeStatusClass = "disk-usage-free--warning";
+    freeIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+  }
+
+  parts.push(`<span class="disk-usage-free ${freeStatusClass}">${freeIcon}${formatBytes(freeBytes)} free</span>`);
+
+  el.diskUsageDetails.innerHTML = parts.join("");
 }
 
 function selectGame(title) {
