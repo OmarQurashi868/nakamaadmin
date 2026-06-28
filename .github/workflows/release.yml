@@ -63,7 +63,7 @@ jobs:
       - name: Prepare artifact (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: cp src-tauri/target/release/tauri-app.exe nakama-admin.exe
+        run: cp src-tauri/target/release/nakama-admin.exe nakama-admin.exe
 
       - name: Prepare artifact (Linux)
         if: runner.os == 'Linux'
@@ -90,11 +90,15 @@ jobs:
       - name: Show artifacts
         run: find artifacts -type f -ls
 
+      - name: Set tag
+        id: tag
+        run: echo "name=build-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
       # ponytail: softprops/action-gh-release upserts — safe on re-run
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.sha }}
-          name: "Build ${{ github.sha }}"
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: "Build ${{ steps.tag.outputs.name }}"
           body: |
             Automated build from commit `${{ github.sha }}` on branch `${{ github.ref_name }}`.
           files: artifacts/**/*
