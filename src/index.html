@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NakamaAdmin — Game Server Admin</title>
+    <meta name="description" content="Admin dashboard for NakamaServer — manage games and modpacks." />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="root">
+      <div class="app-container">
+
+        <!-- ─── HEADER ──────────────────────────────────────── -->
+        <header class="app-header">
+          <div class="logo-section">
+            <svg class="logo-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            <h1>NakamaAdmin</h1>
+          </div>
+
+          <div class="header-actions">
+            <!-- Connection status pill -->
+            <div id="conn-status" class="conn-status conn-status--disconnected">
+              <span class="conn-dot"></span>
+              <span id="conn-label">Not connected</span>
+            </div>
+
+            <!-- Refresh -->
+            <button id="btn-refresh" class="settings-trigger" title="Refresh catalog">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </button>
+
+            <!-- Upload game -->
+            <button id="btn-upload-game" class="header-upload-btn" title="Upload game">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Upload Game
+            </button>
+
+            <!-- Upload modpack -->
+            <button id="btn-upload-modpack" class="header-upload-btn header-upload-btn--mod" title="Upload modpack">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Upload Modpack
+            </button>
+
+            <!-- Settings gear -->
+            <button id="btn-settings" class="settings-trigger" title="Settings">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- ─── BODY ────────────────────────────────────────── -->
+        <div class="app-body">
+
+          <!-- ─── SIDEBAR ────────────────────────────────────── -->
+          <aside class="sidebar">
+            <div class="search-section">
+              <div class="search-input-wrapper">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input id="sidebar-search" type="text" placeholder="Filter games…" autocomplete="off" />
+              </div>
+            </div>
+
+            <div id="game-list" class="game-list">
+              <!-- populated by JS -->
+              <div class="list-state" id="sidebar-loading">
+                <svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                </svg>
+                Loading…
+              </div>
+            </div>
+          </aside>
+
+          <!-- ─── MAIN CONTENT ───────────────────────────────── -->
+          <main id="main-content" class="main-content">
+
+            <!-- Welcome / empty state -->
+            <div id="view-welcome" class="welcome-screen">
+              <svg class="welcome-icon" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              <h2>Select a game</h2>
+              <p>Choose a game from the sidebar to view its versions and modpacks, or upload new content using the buttons above.</p>
+            </div>
+
+            <!-- Game details view -->
+            <div id="view-game" class="game-details" style="display:none">
+
+              <div class="details-header">
+                <div class="details-icon">
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                  </svg>
+                </div>
+                <div class="details-title-desc">
+                  <h2 id="detail-game-title">Game Title</h2>
+                  <p class="details-desc" id="detail-game-meta"></p>
+                </div>
+                <button id="btn-delete-all-game" class="btn-danger-outline">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                  </svg>
+                  Delete Game
+                </button>
+              </div>
+
+              <!-- Versions section -->
+              <section class="details-section">
+                <div class="section-header">
+                  <h3 class="section-title">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    Versions
+                  </h3>
+                </div>
+                <div id="versions-list" class="entry-list"></div>
+              </section>
+
+              <!-- Modpacks section -->
+              <section class="details-section">
+                <div class="section-header">
+                  <h3 class="section-title">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    </svg>
+                    Modpacks
+                  </h3>
+                </div>
+                <div id="modpacks-list" class="entry-list"></div>
+              </section>
+
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── SETTINGS MODAL ──────────────────────────────────── -->
+    <div id="modal-settings" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="settings-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Connection Settings
+          </h3>
+          <button class="modal-close" id="settings-close" aria-label="Close">✕</button>
+        </div>
+        <div class="settings-content">
+          <div class="setting-group">
+            <label for="input-server-url">Server URL</label>
+            <input id="input-server-url" type="text" placeholder="http://192.168.1.100:8080" autocomplete="off" />
+            <span class="hint">Full URL of your NakamaServer, including protocol and port.</span>
+          </div>
+          <div class="setting-group">
+            <label for="input-api-key">Admin API Key</label>
+            <input id="input-api-key" type="password" placeholder="your-admin-secret-key" autocomplete="off" />
+            <span class="hint">The ADMIN_KEY set on the server — required for all admin operations.</span>
+          </div>
+        </div>
+        <div class="settings-actions">
+          <button class="modal-btn modal-btn-cancel" id="settings-cancel">Cancel</button>
+          <button class="modal-btn modal-btn-save" id="settings-save">Save &amp; Connect</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── UPLOAD GAME MODAL ──────────────────────────────── -->
+    <div id="modal-upload-game" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="upload-game-title">
+      <div class="modal-content modal-content--wide">
+        <div class="modal-header">
+          <h3 id="upload-game-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Upload Game
+          </h3>
+          <button class="modal-close" id="upload-game-close" aria-label="Close">✕</button>
+        </div>
+        <div class="settings-content">
+          <!-- Title with fuzzy search -->
+          <div class="setting-group">
+            <label for="ug-title">Game Title</label>
+            <div class="fuzzy-wrapper">
+              <input id="ug-title" type="text" placeholder="e.g. My Awesome Game" autocomplete="off" />
+              <div id="ug-title-suggestions" class="fuzzy-dropdown" style="display:none"></div>
+            </div>
+            <span class="hint">Type to search existing games or enter a new title.</span>
+          </div>
+          <div class="setting-group">
+            <label for="ug-version">Version</label>
+            <input id="ug-version" type="text" placeholder="e.g. 1.0, 2.1.3" autocomplete="off" />
+          </div>
+          <div class="setting-group">
+            <label for="ug-exe">Launch EXE Path</label>
+            <input id="ug-exe" type="text" placeholder="e.g. game.exe or bin/game.exe" autocomplete="off" />
+            <span class="hint">Relative path to the executable inside the zip archive.</span>
+          </div>
+          <div class="setting-group">
+            <label>ZIP File</label>
+            <div class="file-drop-zone" id="ug-drop-zone">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <span id="ug-file-label">Click to select ZIP file</span>
+              <span class="file-hint">or drag &amp; drop</span>
+            </div>
+            <input id="ug-file" type="file" accept=".zip" style="display:none" />
+          </div>
+          <div id="ug-status" class="upload-status" style="display:none"></div>
+        </div>
+        <div class="settings-actions">
+          <button class="modal-btn modal-btn-cancel" id="upload-game-cancel">Cancel</button>
+          <button class="modal-btn modal-btn-save" id="upload-game-submit">
+            <span id="ug-btn-text">Upload Game</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── UPLOAD MODPACK MODAL ───────────────────────────── -->
+    <div id="modal-upload-modpack" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="upload-modpack-title">
+      <div class="modal-content modal-content--wide">
+        <div class="modal-header">
+          <h3 id="upload-modpack-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Upload Modpack
+          </h3>
+          <button class="modal-close" id="upload-modpack-close" aria-label="Close">✕</button>
+        </div>
+        <div class="settings-content">
+          <!-- Game title with fuzzy search -->
+          <div class="setting-group">
+            <label for="um-game-title">Game Title</label>
+            <div class="fuzzy-wrapper">
+              <input id="um-game-title" type="text" placeholder="Search existing games…" autocomplete="off" />
+              <div id="um-game-title-suggestions" class="fuzzy-dropdown" style="display:none"></div>
+            </div>
+            <span class="hint">The game this modpack is for. Must already exist on the server.</span>
+          </div>
+          <div class="setting-group">
+            <label for="um-modpack-title">Modpack Title</label>
+            <input id="um-modpack-title" type="text" placeholder="e.g. Cool Mod Collection" autocomplete="off" />
+          </div>
+          <div class="setting-group">
+            <label>ZIP File</label>
+            <div class="file-drop-zone" id="um-drop-zone">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <span id="um-file-label">Click to select ZIP file</span>
+              <span class="file-hint">or drag &amp; drop</span>
+            </div>
+            <input id="um-file" type="file" accept=".zip" style="display:none" />
+          </div>
+          <div id="um-status" class="upload-status" style="display:none"></div>
+        </div>
+        <div class="settings-actions">
+          <button class="modal-btn modal-btn-cancel" id="upload-modpack-cancel">Cancel</button>
+          <button class="modal-btn modal-btn-save" id="upload-modpack-submit">
+            <span id="um-btn-text">Upload Modpack</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── CONFIRM DELETE MODAL ───────────────────────────── -->
+    <div id="modal-confirm" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <div class="modal-content modal-content--sm">
+        <div class="modal-header">
+          <h3 id="confirm-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--c-danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+            </svg>
+            Confirm Deletion
+          </h3>
+          <button class="modal-close" id="confirm-close" aria-label="Close">✕</button>
+        </div>
+        <div class="settings-content">
+          <p id="confirm-message" style="font-size:0.86rem;line-height:1.6;color:var(--c-text-2)">
+            This action is permanent and cannot be undone.
+          </p>
+        </div>
+        <div class="settings-actions">
+          <button class="modal-btn modal-btn-cancel" id="confirm-cancel">Cancel</button>
+          <button class="modal-btn modal-btn-danger" id="confirm-ok">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TOAST ──────────────────────────────────────────── -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
