@@ -17,12 +17,18 @@ let gamesGrouped = {}; // { [title]: { title, versions: [], modpacks: [] } }
 let selectedGameTitle = null;
 let diskQuota = { total_bytes: 0, used_bytes: 0 };
 
-// File Upload paths (from Rust file picker)
-let gameUploadFilePath = null;
-let modpackUploadFilePath = null;
+// Upload folder paths
+let gameUploadFolder = null;
+let modpackUploadFolder = null;
 
 // Modal Action states
 let confirmAction = null; // Callback for delete confirmation
+
+// Edit state
+let editingEntryUuid = null;  // UUID of the entry being edited
+let editingEntryType = null;  // "game" or "modpack"
+let editingOriginalNotes = null;  // original notes value (null = not tracking)
+let editingOriginalTitleNotes = null;  // original title_notes value
 
 // ─── UPLOAD TRAY STATE ─────────────────────────────────
 // Each entry: { id, label, type, sent, total, status: 'uploading'|'done'|'error', error }
@@ -47,7 +53,10 @@ const el = {
 
   // Details View
   detailGameTitle: document.getElementById("detail-game-title"),
+  detailGameAppId: document.getElementById("detail-game-appid"),
+  detailGameTitleNotes: document.getElementById("detail-game-title-notes"),
   detailGameMeta: document.getElementById("detail-game-meta"),
+  btnEditGameInfo: document.getElementById("btn-edit-game-info"),
   btnDeleteAllGame: document.getElementById("btn-delete-all-game"),
   versionsList: document.getElementById("versions-list"),
   modpacksList: document.getElementById("modpacks-list"),
@@ -69,6 +78,10 @@ const el = {
   ugTitleSuggestions: document.getElementById("ug-title-suggestions"),
   ugVersion: document.getElementById("ug-version"),
   ugExe: document.getElementById("ug-exe"),
+  ugExePick: document.getElementById("ug-exe-pick"),
+  ugAppId: document.getElementById("ug-appid"),
+  ugTitleNotes: document.getElementById("ug-title-notes"),
+  ugNotes: document.getElementById("ug-notes"),
   ugDropZone: document.getElementById("ug-drop-zone"),
   ugFileLabel: document.getElementById("ug-file-label"),
   ugStatus: document.getElementById("ug-status"),
@@ -82,6 +95,7 @@ const el = {
   umGameTitle: document.getElementById("um-game-title"),
   umGameTitleSuggestions: document.getElementById("um-game-title-suggestions"),
   umModpackTitle: document.getElementById("um-modpack-title"),
+  umNotes: document.getElementById("um-notes"),
   umDropZone: document.getElementById("um-drop-zone"),
   umFileLabel: document.getElementById("um-file-label"),
   umStatus: document.getElementById("um-status"),
@@ -93,6 +107,44 @@ const el = {
   confirmCancel: document.getElementById("confirm-cancel"),
   confirmOk: document.getElementById("confirm-ok"),
   confirmMessage: document.getElementById("confirm-message"),
+
+  // Edit Game Info Modal (title-level)
+  modalEditGameInfo: document.getElementById("modal-edit-game-info"),
+  editGameInfoClose: document.getElementById("edit-game-info-close"),
+  editGameInfoCancel: document.getElementById("edit-game-info-cancel"),
+  editGameInfoSubmit: document.getElementById("edit-game-info-submit"),
+  egiTitle: document.getElementById("egi-title"),
+  egiAppId: document.getElementById("egi-appid"),
+  egiTitleNotes: document.getElementById("egi-title-notes"),
+  egiStatus: document.getElementById("egi-status"),
+  egiBtnText: document.getElementById("egi-btn-text"),
+
+  // Edit Game Modal (per-version)
+  modalEditGame: document.getElementById("modal-edit-game"),
+  editGameClose: document.getElementById("edit-game-close"),
+  editGameCancel: document.getElementById("edit-game-cancel"),
+  editGameSubmit: document.getElementById("edit-game-submit"),
+  egUuid: document.getElementById("eg-uuid"),
+  egTitle: document.getElementById("eg-title"),
+  egTitleSuggestions: document.getElementById("eg-title-suggestions"),
+  egVersion: document.getElementById("eg-version"),
+  egExe: document.getElementById("eg-exe"),
+  egNotes: document.getElementById("eg-notes"),
+  egStatus: document.getElementById("eg-status"),
+  egBtnText: document.getElementById("eg-btn-text"),
+
+  // Edit Modpack Modal
+  modalEditModpack: document.getElementById("modal-edit-modpack"),
+  editModpackClose: document.getElementById("edit-modpack-close"),
+  editModpackCancel: document.getElementById("edit-modpack-cancel"),
+  editModpackSubmit: document.getElementById("edit-modpack-submit"),
+  emUuid: document.getElementById("em-uuid"),
+  emGameTitle: document.getElementById("em-game-title"),
+  emGameTitleSuggestions: document.getElementById("em-game-title-suggestions"),
+  emModpackTitle: document.getElementById("em-modpack-title"),
+  emNotes: document.getElementById("em-notes"),
+  emStatus: document.getElementById("em-status"),
+  emBtnText: document.getElementById("em-btn-text"),
 
   // Toast Container
   toastContainer: document.getElementById("toast-container"),
@@ -397,6 +449,28 @@ function renderGameDetails(title) {
   el.detailGameTitle.textContent = title;
   el.detailGameMeta.textContent = `${entry.versions.length} version(s), ${entry.modpacks.length} modpack(s) registered.`;
 
+  // Show app_id and title_notes at title level (per-title, from first version)
+  const firstVer = entry.versions[0] || {};
+  const appId = firstVer.app_id || "";
+  const titleNotes = firstVer.title_notes || "";
+  if (appId) {
+    el.detailGameAppId.textContent = `AppID: ${appId}`;
+    el.detailGameAppId.style.display = "";
+  } else {
+    el.detailGameAppId.style.display = "none";
+  }
+  if (titleNotes) {
+    el.detailGameTitleNotes.textContent = titleNotes;
+    el.detailGameTitleNotes.style.display = "";
+  } else {
+    el.detailGameTitleNotes.style.display = "none";
+  }
+
+  // Wire edit game info button
+  el.btnEditGameInfo.onclick = () => openEditGameInfo(title);
+  // Wire delete game button
+  el.btnDeleteAllGame.onclick = () => { confirmDeleteAllGame(title); };
+
   // Render Versions List
   el.versionsList.innerHTML = "";
   if (entry.versions.length === 0) {
@@ -405,6 +479,7 @@ function renderGameDetails(title) {
     entry.versions.forEach(v => {
       const row = document.createElement("div");
       row.className = "entry-row";
+      const vu = escapeJsString(v.uuid || "");
       row.innerHTML = `
         <div class="entry-info">
           <div class="entry-primary">
@@ -412,6 +487,8 @@ function renderGameDetails(title) {
             ${v.launch_exe ? `<span style="font-size:0.72rem;color:var(--c-accent);border:1px solid rgba(99,102,241,0.3);padding:1px 5px;border-radius:3px;font-weight:normal">launch: ${escapeHtml(v.launch_exe)}</span>` : ""}
           </div>
           <div class="entry-secondary">
+            <span style="font-family:monospace;font-size:0.68rem;color:var(--c-text-3)">${escapeHtml(v.uuid || "")}</span>
+            <span>•</span>
             <span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               ${formatBytes(v.file_size_bytes)}
@@ -427,9 +504,20 @@ function renderGameDetails(title) {
               Uploaded: ${new Date(v.uploaded_at).toLocaleString()}
             </span>
           </div>
+          ${v.notes ? `<div style="font-size:0.78rem;color:var(--c-text-2);margin-top:4px;line-height:1.4;white-space:pre-wrap;word-break:break-word">${escapeHtml(v.notes)}</div>` : ""}
         </div>
         <div class="entry-actions">
-          <button class="btn-icon-danger" title="Delete this version" onclick="confirmDeleteVersion('${escapeJsString(title)}', '${escapeJsString(v.version)}')">
+          <button class="btn-icon-download" title="Download" onclick="downloadGame('${vu}', '${escapeJsString(v.file_name || '')}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </button>
+          <button class="btn-icon-edit" title="Edit this version" onclick="openEditGame('${vu}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+          <button class="btn-icon-danger" title="Delete this version" onclick="confirmDeleteVersion('${vu}')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
             </svg>
@@ -448,10 +536,13 @@ function renderGameDetails(title) {
     entry.modpacks.forEach(m => {
       const row = document.createElement("div");
       row.className = "entry-row";
+      const mu = escapeJsString(m.uuid || "");
       row.innerHTML = `
         <div class="entry-info">
           <div class="entry-primary">${escapeHtml(m.modpack_title)}</div>
           <div class="entry-secondary">
+            <span style="font-family:monospace;font-size:0.68rem;color:var(--c-text-3)">${escapeHtml(m.uuid || "")}</span>
+            <span>•</span>
             <span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               ${formatBytes(m.file_size_bytes)}
@@ -467,9 +558,20 @@ function renderGameDetails(title) {
               Uploaded: ${new Date(m.uploaded_at).toLocaleString()}
             </span>
           </div>
+          ${m.notes ? `<div style="font-size:0.78rem;color:var(--c-text-2);margin-top:4px;line-height:1.4;white-space:pre-wrap;word-break:break-word">${escapeHtml(m.notes)}</div>` : ""}
         </div>
         <div class="entry-actions">
-          <button class="btn-icon-danger" title="Delete this modpack" onclick="confirmDeleteModpack('${escapeJsString(title)}', '${escapeJsString(m.modpack_title)}')">
+          <button class="btn-icon-download" title="Download" onclick="downloadModpack('${mu}', '${escapeJsString(m.file_name || '')}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </button>
+          <button class="btn-icon-edit" title="Edit this modpack" onclick="openEditModpack('${mu}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+          <button class="btn-icon-danger" title="Delete this modpack" onclick="confirmDeleteModpack('${mu}')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
             </svg>
@@ -480,26 +582,28 @@ function renderGameDetails(title) {
     });
   }
 
-  // Deleting entire game
-  el.btnDeleteAllGame.onclick = () => {
-    confirmDeleteAllGame(title);
-  };
 }
 
 // ─── DELETIONS ─────────────────────────────────────────
 
-window.confirmDeleteVersion = function(title, version) {
-  el.confirmMessage.innerHTML = `Are you sure you want to permanently delete <strong>${escapeHtml(title)}</strong> version <strong>v${escapeHtml(version)}</strong>?<br/><br/>This file will be deleted from disk and cataloged records. This action is permanent.`;
+window.confirmDeleteVersion = function(uuid) {
+  // Find entry info for display
+  let label = uuid;
+  for (const title of Object.keys(gamesGrouped)) {
+    const v = gamesGrouped[title].versions.find(v => v.uuid === uuid);
+    if (v) { label = `${v.title} v${v.version}`; break; }
+  }
+  el.confirmMessage.innerHTML = `Are you sure you want to permanently delete version <strong>${escapeHtml(label)}</strong>?<br/><br/>This file will be deleted from disk and cataloged records. This action is permanent.`;
   confirmAction = async () => {
     try {
       const cleanUrl = serverUrl.replace(/\/$/, "");
       await invoke("server_request", {
         method: "DELETE",
-        url: `${cleanUrl}/admin/game/${encodeURIComponent(title)}/${encodeURIComponent(version)}`,
+        url: `${cleanUrl}/admin/game/${encodeURIComponent(uuid)}`,
         apiKey: adminKey,
         body: null,
       });
-      showToast(`Successfully deleted version ${version}`, "success");
+      showToast(`Successfully deleted version`, "success");
       refreshCatalog();
     } catch (err) {
       showToast(`Failed to delete version: ${err}`, "error");
@@ -508,18 +612,24 @@ window.confirmDeleteVersion = function(title, version) {
   showModal(el.modalConfirm);
 };
 
-window.confirmDeleteModpack = function(gameTitle, modpackTitle) {
-  el.confirmMessage.innerHTML = `Are you sure you want to permanently delete the modpack <strong>${escapeHtml(modpackTitle)}</strong> for <strong>${escapeHtml(gameTitle)}</strong>?<br/><br/>This file will be deleted from disk and cataloged records. This action is permanent.`;
+window.confirmDeleteModpack = function(uuid) {
+  // Find entry info for display
+  let label = uuid;
+  for (const title of Object.keys(gamesGrouped)) {
+    const m = gamesGrouped[title].modpacks.find(m => m.uuid === uuid);
+    if (m) { label = `${m.modpack_title} (for ${m.game_title})`; break; }
+  }
+  el.confirmMessage.innerHTML = `Are you sure you want to permanently delete the modpack <strong>${escapeHtml(label)}</strong>?<br/><br/>This file will be deleted from disk and cataloged records. This action is permanent.`;
   confirmAction = async () => {
     try {
       const cleanUrl = serverUrl.replace(/\/$/, "");
       await invoke("server_request", {
         method: "DELETE",
-        url: `${cleanUrl}/admin/modpack/${encodeURIComponent(gameTitle)}/${encodeURIComponent(modpackTitle)}`,
+        url: `${cleanUrl}/admin/modpack/${encodeURIComponent(uuid)}`,
         apiKey: adminKey,
         body: null,
       });
-      showToast(`Successfully deleted modpack ${modpackTitle}`, "success");
+      showToast(`Successfully deleted modpack`, "success");
       refreshCatalog();
     } catch (err) {
       showToast(`Failed to delete modpack: ${err}`, "error");
@@ -553,7 +663,7 @@ function confirmDeleteAllGame(title) {
       try {
         await invoke("server_request", {
           method: "DELETE",
-          url: `${cleanUrl}/admin/game/${encodeURIComponent(title)}/${encodeURIComponent(v.version)}`,
+          url: `${cleanUrl}/admin/game/${encodeURIComponent(v.uuid)}`,
           apiKey: adminKey,
           body: null,
         });
@@ -569,7 +679,7 @@ function confirmDeleteAllGame(title) {
       try {
         await invoke("server_request", {
           method: "DELETE",
-          url: `${cleanUrl}/admin/modpack/${encodeURIComponent(title)}/${encodeURIComponent(m.modpack_title)}`,
+          url: `${cleanUrl}/admin/modpack/${encodeURIComponent(m.uuid)}`,
           apiKey: adminKey,
           body: null,
         });
@@ -590,6 +700,262 @@ function confirmDeleteAllGame(title) {
     refreshCatalog();
   };
   showModal(el.modalConfirm);
+}
+
+// ─── DOWNLOADS ──────────────────────────────────────────
+
+window.downloadGame = async function(uuid, fileName) {
+  if (!uuid) return;
+  try {
+    const savePath = await invoke("select_save_path", { defaultName: fileName || `${uuid}.zip` });
+    if (!savePath) return;
+    const cleanUrl = serverUrl.replace(/\/$/, "");
+    await invoke("download_file", {
+      url: `${cleanUrl}/download/game/${encodeURIComponent(uuid)}`,
+      apiKey: adminKey,
+      savePath,
+    });
+    showToast(`Downloaded ${fileName || uuid}`, "success");
+  } catch (err) {
+    console.error(err);
+    showToast(`Download failed: ${err}`, "error");
+  }
+};
+
+window.downloadModpack = async function(uuid, fileName) {
+  if (!uuid) return;
+  try {
+    const savePath = await invoke("select_save_path", { defaultName: fileName || `${uuid}.zip` });
+    if (!savePath) return;
+    const cleanUrl = serverUrl.replace(/\/$/, "");
+    await invoke("download_file", {
+      url: `${cleanUrl}/download/modpack/${encodeURIComponent(uuid)}`,
+      apiKey: adminKey,
+      savePath,
+    });
+    showToast(`Downloaded ${fileName || uuid}`, "success");
+  } catch (err) {
+    console.error(err);
+    showToast(`Download failed: ${err}`, "error");
+  }
+};
+
+// ─── EDIT HANDLERS ──────────────────────────────────────
+
+// ─── EDIT GAME INFO (title-level) ─────────────────────────
+
+window.openEditGameInfo = function(title) {
+  const entry = gamesGrouped[title];
+  if (!entry) return;
+
+  // app_id and title_notes are per-title; grab from first version
+  const firstVer = entry.versions[0] || {};
+  const appId = firstVer.app_id || "";
+  const titleNotes = firstVer.title_notes || "";
+
+  editingEntryUuid = null;
+  editingEntryType = "game-info";
+  editingOriginalTitleNotes = titleNotes;
+  el.egiTitle.value = title;
+  el.egiAppId.value = appId;
+  el.egiTitleNotes.value = titleNotes;
+  el.egiStatus.style.display = "none";
+  resetUploadButton(el.egiBtnText, "Save Changes");
+  showModal(el.modalEditGameInfo);
+};
+
+async function handleEditGameInfoSubmit() {
+  const newTitle = el.egiTitle.value.trim();
+  const appId = el.egiAppId.value.trim();
+  const titleNotes = el.egiTitleNotes.value.trim();
+
+  if (!newTitle) {
+    setUploadStatus(el.egiStatus, "Title cannot be empty.", "error");
+    return;
+  }
+
+  // PATCH every version of this game with the new title + app_id + title_notes
+  const entry = gamesGrouped[selectedGameTitle];
+  if (!entry) return;
+
+  setUploadLoading(el.egiStatus, el.egiBtnText, "Saving…");
+  try {
+    const cleanUrl = serverUrl.replace(/\/$/, "");
+    const body = {};
+    if (newTitle !== selectedGameTitle) body.title = newTitle;
+    body.app_id = appId; // always send app_id so user can clear it
+    if (titleNotes !== editingOriginalTitleNotes) body.title_notes = titleNotes;
+
+    let failCount = 0;
+    for (const v of entry.versions) {
+      try {
+        await invoke("server_request", {
+          method: "PATCH",
+          url: `${cleanUrl}/admin/game/${encodeURIComponent(v.uuid)}`,
+          apiKey: adminKey,
+          body: JSON.stringify(body),
+        });
+      } catch (err) {
+        console.error(err);
+        failCount++;
+      }
+    }
+
+    // Also update all modpacks' game_title if title changed
+    if (newTitle !== selectedGameTitle) {
+      const mpBody = { game_title: newTitle };
+      for (const m of entry.modpacks) {
+        try {
+          await invoke("server_request", {
+            method: "PATCH",
+            url: `${cleanUrl}/admin/modpack/${encodeURIComponent(m.uuid)}`,
+            apiKey: adminKey,
+            body: JSON.stringify(mpBody),
+          });
+        } catch (err) {
+          console.error(err);
+          failCount++;
+        }
+      }
+    }
+
+    hideModal(el.modalEditGameInfo);
+    if (failCount === 0) {
+      showToast("Game info updated", "success");
+    } else {
+      showToast(`Updated with ${failCount} error(s)`, "warning");
+    }
+    refreshCatalog();
+  } catch (err) {
+    console.error(err);
+    setUploadStatus(el.egiStatus, `Failed to update: ${err}`, "error");
+    resetUploadButton(el.egiBtnText, "Save Changes");
+  }
+}
+
+// ─── EDIT GAME (per-version) ──────────────────────────────
+
+window.openEditGame = function(uuid) {
+  // Find the entry in grouped catalog
+  let entry = null;
+  for (const title of Object.keys(gamesGrouped)) {
+    entry = gamesGrouped[title].versions.find(v => v.uuid === uuid);
+    if (entry) break;
+  }
+  if (!entry) {
+    showToast("Game version not found in catalog", "error");
+    return;
+  }
+  editingEntryUuid = uuid;
+  editingEntryType = "game";
+  editingOriginalNotes = entry.notes || "";
+  el.egUuid.value = uuid;
+  el.egTitle.value = entry.title || "";
+  el.egVersion.value = entry.version || "";
+  el.egExe.value = entry.launch_exe || "";
+  el.egNotes.value = editingOriginalNotes;
+  el.egStatus.style.display = "none";
+  resetUploadButton(el.egBtnText, "Save Changes");
+  showModal(el.modalEditGame);
+};
+
+window.openEditModpack = function(uuid) {
+  // Find the entry in grouped catalog
+  let entry = null;
+  for (const title of Object.keys(gamesGrouped)) {
+    entry = gamesGrouped[title].modpacks.find(m => m.uuid === uuid);
+    if (entry) break;
+  }
+  if (!entry) {
+    showToast("Modpack not found in catalog", "error");
+    return;
+  }
+  editingEntryUuid = uuid;
+  editingEntryType = "modpack";
+  editingOriginalNotes = entry.notes || "";
+  el.emUuid.value = uuid;
+  el.emGameTitle.value = entry.game_title || "";
+  el.emModpackTitle.value = entry.modpack_title || "";
+  el.emNotes.value = editingOriginalNotes;
+  el.emStatus.style.display = "none";
+  resetUploadButton(el.emBtnText, "Save Changes");
+  showModal(el.modalEditModpack);
+};
+
+async function handleEditGameSubmit() {
+  const uuid = editingEntryUuid;
+  if (!uuid) return;
+
+  const title = el.egTitle.value.trim();
+  const version = el.egVersion.value.trim();
+  const launchExe = el.egExe.value.trim();
+  const notes = el.egNotes.value.trim();
+
+  if (!title && !version && !launchExe && notes === editingOriginalNotes) {
+    setUploadStatus(el.egStatus, "No changes to save.", "error");
+    return;
+  }
+
+  setUploadLoading(el.egStatus, el.egBtnText, "Saving…");
+  try {
+    const cleanUrl = serverUrl.replace(/\/$/, "");
+    const body = {};
+    if (title) body.title = title;
+    if (version) body.version = version;
+    if (launchExe) body.launch_exe = launchExe;
+    if (notes !== editingOriginalNotes) body.notes = notes;
+
+    await invoke("server_request", {
+      method: "PATCH",
+      url: `${cleanUrl}/admin/game/${encodeURIComponent(uuid)}`,
+      apiKey: adminKey,
+      body: JSON.stringify(body),
+    });
+    hideModal(el.modalEditGame);
+    showToast("Game updated successfully", "success");
+    refreshCatalog();
+  } catch (err) {
+    console.error(err);
+    setUploadStatus(el.egStatus, `Failed to update: ${err}`, "error");
+    resetUploadButton(el.egBtnText, "Save Changes");
+  }
+}
+
+async function handleEditModpackSubmit() {
+  const uuid = editingEntryUuid;
+  if (!uuid) return;
+
+  const gameTitle = el.emGameTitle.value.trim();
+  const modpackTitle = el.emModpackTitle.value.trim();
+  const notes = el.emNotes.value.trim();
+
+  if (!gameTitle && !modpackTitle && notes === editingOriginalNotes) {
+    setUploadStatus(el.emStatus, "No changes to save.", "error");
+    return;
+  }
+
+  setUploadLoading(el.emStatus, el.emBtnText, "Saving…");
+  try {
+    const cleanUrl = serverUrl.replace(/\/$/, "");
+    const body = {};
+    if (gameTitle) body.game_title = gameTitle;
+    if (modpackTitle) body.modpack_title = modpackTitle;
+    if (notes !== editingOriginalNotes) body.notes = notes;
+
+    await invoke("server_request", {
+      method: "PATCH",
+      url: `${cleanUrl}/admin/modpack/${encodeURIComponent(uuid)}`,
+      apiKey: adminKey,
+      body: JSON.stringify(body),
+    });
+    hideModal(el.modalEditModpack);
+    showToast("Modpack updated successfully", "success");
+    refreshCatalog();
+  } catch (err) {
+    console.error(err);
+    setUploadStatus(el.emStatus, `Failed to update: ${err}`, "error");
+    resetUploadButton(el.emBtnText, "Save Changes");
+  }
 }
 
 // ─── FUZZY SEARCH MATCHES ──────────────────────────────
@@ -637,24 +1003,55 @@ function getUniqueGameTitles() {
   return Object.keys(gamesGrouped);
 }
 
-// ─── FILE SELECTION ────────────────────────────────────
+// ─── FOLDER SELECTION ──────────────────────────────────
 
-async function pickFile(zoneId, labelId, uploadType) {
+async function pickGameFolder() {
   try {
-    const path = await invoke("select_zip_file");
+    const path = await invoke("select_folder");
     if (path) {
-      const filename = path.split(/[/\\]/).pop();
-      document.getElementById(labelId).textContent = filename;
-      document.getElementById(zoneId).classList.add("file-selected");
-
-      if (uploadType === "game") {
-        gameUploadFilePath = path;
-      } else {
-        modpackUploadFilePath = path;
-      }
+      gameUploadFolder = path;
+      el.ugFileLabel.textContent = path.split(/[/\\]/).pop();
+      el.ugDropZone.classList.add("file-selected");
     }
   } catch (err) {
-    showToast(`Failed to pick file: ${err}`, "error");
+    showToast(`Failed to pick folder: ${err}`, "error");
+  }
+}
+
+async function pickModpackFolder() {
+  try {
+    const path = await invoke("select_folder");
+    if (path) {
+      modpackUploadFolder = path;
+      el.umFileLabel.textContent = path.split(/[/\\]/).pop();
+      el.umDropZone.classList.add("file-selected");
+    }
+  } catch (err) {
+    showToast(`Failed to pick folder: ${err}`, "error");
+  }
+}
+
+async function pickLaunchExe() {
+  if (!gameUploadFolder) {
+    showToast("Select the game folder first, then pick the launch EXE.", "error");
+    return;
+  }
+  try {
+    const paths = await invoke("select_files");
+    if (!paths || paths.length !== 1) return;
+
+    const picked = paths[0];
+    // Store relative path from the game folder
+    const gameRoot = gameUploadFolder.replace(/\\/g, "/");
+    const pickedNorm = picked.replace(/\\/g, "/");
+    if (!pickedNorm.startsWith(gameRoot)) {
+      showToast("Launch EXE must be inside the selected game folder.", "error");
+      return;
+    }
+    const rel = pickedNorm.slice(gameRoot.length + 1); // +1 for the trailing /
+    el.ugExe.value = rel || picked.split(/[/\\]/).pop();
+  } catch (err) {
+    showToast(`Failed to pick launch EXE: ${err}`, "error");
   }
 }
 
@@ -664,28 +1061,40 @@ async function handleGameUpload() {
   const title = el.ugTitle.value.trim();
   const version = el.ugVersion.value.trim();
   const launchExe = el.ugExe.value.trim();
+  const appId = el.ugAppId.value.trim();
+  const notes = el.ugNotes.value.trim();
+  const titleNotes = el.ugTitleNotes.value.trim();
 
   if (!title || !version || !launchExe) {
     setUploadStatus(el.ugStatus, "Please fill in all fields.", "error");
     return;
   }
 
-  if (!gameUploadFilePath) {
-    setUploadStatus(el.ugStatus, "Please select a ZIP file.", "error");
+  if (!gameUploadFolder) {
+    setUploadStatus(el.ugStatus, "Please select a game folder.", "error");
     return;
   }
 
   const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const label = `${title} v${version}`;
-  const filePath = gameUploadFilePath;
+  const folderToZip = gameUploadFolder; // capture before reset clears it
 
-  // Register in tray and dismiss modal immediately
+  // Register in tray immediately, dismiss modal
   trayAddItem(uploadId, label, "game");
   hideModal(el.modalUploadGame);
   resetGameUploadForm();
 
-  // Fire-and-forget background upload
+  // Background: zip → upload → cleanup
   (async () => {
+    let tempZip;
+    try {
+      tempZip = await invoke("create_temp_zip", { roots: [folderToZip] });
+    } catch (err) {
+      console.error(err);
+      trayItemError(uploadId, `Zip failed: ${err}`);
+      return;
+    }
+
     try {
       const cleanUrl = serverUrl.replace(/\/$/, "");
       await invoke("upload_game", {
@@ -694,7 +1103,10 @@ async function handleGameUpload() {
         title,
         version,
         launchExe,
-        filePath,
+        appId,
+        notes,
+        titleNotes,
+        filePath: tempZip,
         uploadId,
       });
       trayItemDone(uploadId);
@@ -702,7 +1114,6 @@ async function handleGameUpload() {
       refreshCatalog();
     } catch (err) {
       console.error(err);
-      // If we were in 'cancelling' state the stream error is expected
       if (uploadTrayItems[uploadId]?.status === "cancelling") {
         trayItemCancelled(uploadId);
       } else {
@@ -710,34 +1121,46 @@ async function handleGameUpload() {
         showToast(`Upload failed: ${label}`, "error");
       }
     }
+    // Clean up temp zip
+    try { await invoke("delete_temp_file", { path: tempZip }); } catch (_) {}
   })();
 }
 
 async function handleModpackUpload() {
   const gameTitle = el.umGameTitle.value.trim();
   const modpackTitle = el.umModpackTitle.value.trim();
+  const notes = el.umNotes.value.trim();
 
   if (!gameTitle || !modpackTitle) {
     setUploadStatus(el.umStatus, "Please fill in all fields.", "error");
     return;
   }
 
-  if (!modpackUploadFilePath) {
-    setUploadStatus(el.umStatus, "Please select a ZIP file.", "error");
+  if (!modpackUploadFolder) {
+    setUploadStatus(el.umStatus, "Please select a modpack folder.", "error");
     return;
   }
 
   const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const label = `${modpackTitle} (${gameTitle})`;
-  const filePath = modpackUploadFilePath;
+  const folderToZip = modpackUploadFolder; // capture before reset clears it
 
-  // Register in tray and dismiss modal immediately
+  // Register in tray immediately, dismiss modal
   trayAddItem(uploadId, label, "modpack");
   hideModal(el.modalUploadModpack);
   resetModpackUploadForm();
 
-  // Fire-and-forget background upload
+  // Background: zip → upload → cleanup
   (async () => {
+    let tempZip;
+    try {
+      tempZip = await invoke("create_temp_zip", { roots: [folderToZip] });
+    } catch (err) {
+      console.error(err);
+      trayItemError(uploadId, `Zip failed: ${err}`);
+      return;
+    }
+
     try {
       const cleanUrl = serverUrl.replace(/\/$/, "");
       await invoke("upload_modpack", {
@@ -745,7 +1168,8 @@ async function handleModpackUpload() {
         adminKey,
         gameTitle,
         modpackTitle,
-        filePath,
+        notes,
+        filePath: tempZip,
         uploadId,
       });
       trayItemDone(uploadId);
@@ -753,7 +1177,6 @@ async function handleModpackUpload() {
       refreshCatalog();
     } catch (err) {
       console.error(err);
-      // If we were in 'cancelling' state the stream error is expected
       if (uploadTrayItems[uploadId]?.status === "cancelling") {
         trayItemCancelled(uploadId);
       } else {
@@ -761,8 +1184,12 @@ async function handleModpackUpload() {
         showToast(`Upload failed: ${modpackTitle}`, "error");
       }
     }
+    // Clean up temp zip
+    try { await invoke("delete_temp_file", { path: tempZip }); } catch (_) {}
   })();
 }
+
+// (end of handleModpackUpload) — next function
 
 function setUploadStatus(statusEl, text, type) {
   statusEl.style.display = "block";
@@ -792,8 +1219,11 @@ function resetGameUploadForm() {
   el.ugTitle.value = "";
   el.ugVersion.value = "";
   el.ugExe.value = "";
-  gameUploadFilePath = null;
-  el.ugFileLabel.textContent = "Click to select ZIP file";
+  el.ugAppId.value = "";
+  el.ugTitleNotes.value = "";
+  el.ugNotes.value = "";
+  gameUploadFolder = null;
+  el.ugFileLabel.textContent = "Click to select game folder";
   el.ugDropZone.className = "file-drop-zone";
   el.ugStatus.style.display = "none";
   resetUploadButton(el.ugBtnText, "Upload Game");
@@ -802,8 +1232,9 @@ function resetGameUploadForm() {
 function resetModpackUploadForm() {
   el.umGameTitle.value = "";
   el.umModpackTitle.value = "";
-  modpackUploadFilePath = null;
-  el.umFileLabel.textContent = "Click to select ZIP file";
+  el.umNotes.value = "";
+  modpackUploadFolder = null;
+  el.umFileLabel.textContent = "Click to select modpack folder";
   el.umDropZone.className = "file-drop-zone";
   el.umStatus.style.display = "none";
   resetUploadButton(el.umBtnText, "Upload Modpack");
@@ -844,8 +1275,21 @@ function initEventListeners() {
   };
   el.uploadGameClose.onclick = () => hideModal(el.modalUploadGame);
   el.uploadGameCancel.onclick = () => hideModal(el.modalUploadGame);
-  el.ugDropZone.onclick = () => pickFile("ug-drop-zone", "ug-file-label", "game");
+  el.ugDropZone.onclick = () => pickGameFolder();
+  el.ugExePick.onclick = () => pickLaunchExe();
+  el.ugExe.onclick = () => pickLaunchExe();
   el.uploadGameSubmit.onclick = () => handleGameUpload();
+
+  // Auto-fill title_notes when game title is filled from existing game
+  el.ugTitle.addEventListener("change", () => {
+    const t = el.ugTitle.value.trim();
+    if (t && gamesGrouped[t]) {
+      const firstVer = gamesGrouped[t].versions[0];
+      if (firstVer && firstVer.title_notes && !el.ugTitleNotes.value.trim()) {
+        el.ugTitleNotes.value = firstVer.title_notes;
+      }
+    }
+  });
 
   // Upload Modpack Button & Modal
   el.btnUploadModpack.onclick = () => {
@@ -854,7 +1298,7 @@ function initEventListeners() {
   };
   el.uploadModpackClose.onclick = () => hideModal(el.modalUploadModpack);
   el.uploadModpackCancel.onclick = () => hideModal(el.modalUploadModpack);
-  el.umDropZone.onclick = () => pickFile("um-drop-zone", "um-file-label", "modpack");
+  el.umDropZone.onclick = () => pickModpackFolder();
   el.uploadModpackSubmit.onclick = () => handleModpackUpload();
 
   // Confirm Modal
@@ -868,9 +1312,26 @@ function initEventListeners() {
     }
   };
 
+  // Edit Game Info Modal
+  el.editGameInfoClose.onclick = () => hideModal(el.modalEditGameInfo);
+  el.editGameInfoCancel.onclick = () => hideModal(el.modalEditGameInfo);
+  el.editGameInfoSubmit.onclick = () => handleEditGameInfoSubmit();
+
+  // Edit Game Modal (per-version)
+  el.editGameClose.onclick = () => hideModal(el.modalEditGame);
+  el.editGameCancel.onclick = () => hideModal(el.modalEditGame);
+  el.editGameSubmit.onclick = () => handleEditGameSubmit();
+
+  // Edit Modpack Modal
+  el.editModpackClose.onclick = () => hideModal(el.modalEditModpack);
+  el.editModpackCancel.onclick = () => hideModal(el.modalEditModpack);
+  el.editModpackSubmit.onclick = () => handleEditModpackSubmit();
+
   // Setup fuzzy search dropdowns
   setupFuzzySearch(el.ugTitle, el.ugTitleSuggestions, getUniqueGameTitles);
   setupFuzzySearch(el.umGameTitle, el.umGameTitleSuggestions, getUniqueGameTitles);
+  setupFuzzySearch(el.emGameTitle, el.emGameTitleSuggestions, getUniqueGameTitles);
+  setupFuzzySearch(el.egTitle, el.egTitleSuggestions, getUniqueGameTitles);
 }
 
 // ─── UPLOAD TRAY ────────────────────────────────────────
@@ -1032,7 +1493,7 @@ function trayItemHTML(item) {
   } else {
     const sentStr = item.total > 0
       ? `${formatBytes(item.sent)} / ${formatBytes(item.total)} (${pct}%)`
-      : "Preparing…";
+      : "Zipping…";
     statusText = `<span class="upload-item-status">${sentStr}</span>`;
   }
 

@@ -123,8 +123,15 @@
                 </div>
                 <div class="details-title-desc">
                   <h2 id="detail-game-title">Game Title</h2>
+                  <span id="detail-game-appid" style="display:none;font-size:0.78rem;color:var(--c-accent);margin-top:2px"></span>
+                  <span id="detail-game-title-notes" style="display:none;font-size:0.78rem;color:var(--c-text-2);margin-top:4px;line-height:1.4;white-space:pre-wrap;word-break:break-word"></span>
                   <p class="details-desc" id="detail-game-meta"></p>
                 </div>
+                <button id="btn-edit-game-info" class="btn-icon-edit" title="Edit title &amp; AppID" style="width:32px;height:32px;margin-right:4px">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
                 <button id="btn-delete-all-game" class="btn-danger-outline">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
@@ -223,20 +230,35 @@
             <input id="ug-version" type="text" placeholder="e.g. 1.0, 2.1.3" autocomplete="off" />
           </div>
           <div class="setting-group">
-            <label for="ug-exe">Launch EXE Path</label>
-            <input id="ug-exe" type="text" placeholder="e.g. game.exe or bin/game.exe" autocomplete="off" />
-            <span class="hint">Relative path to the executable inside the zip archive.</span>
+            <label>Launch EXE</label>
+            <div style="display:flex;gap:0.5rem;align-items:center">
+              <input id="ug-exe" type="text" placeholder="Select an executable file…" readonly style="flex:1;cursor:pointer" autocomplete="off" />
+              <button type="button" id="ug-exe-pick" class="modal-btn modal-btn-cancel" style="white-space:nowrap;padding:0.45rem 0.8rem">Browse…</button>
+            </div>
+            <span class="hint">Pick the main executable from your selected files. Must be one of the upload files.</span>
           </div>
           <div class="setting-group">
-            <label>ZIP File</label>
+            <label for="ug-appid">AppID</label>
+            <input id="ug-appid" type="number" placeholder="e.g. 730" autocomplete="off" />
+          </div>
+          <div class="setting-group">
+            <label for="ug-notes">Game Notes</label>
+            <textarea id="ug-title-notes" placeholder="Game-wide notes (shared across all versions)…" rows="2" autocomplete="off"></textarea>
+          </div>
+          <div class="setting-group">
+            <label for="ug-notes-version">Version Notes</label>
+            <textarea id="ug-notes" placeholder="Notes for this specific version…" rows="2" autocomplete="off"></textarea>
+          </div>
+          <div class="setting-group">
+            <label>Game Folder</label>
             <div class="file-drop-zone" id="ug-drop-zone">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
               </svg>
-              <span id="ug-file-label">Click to select ZIP file</span>
-              <span class="file-hint">or drag &amp; drop</span>
+              <span id="ug-file-label">Click to select game folder</span>
+              <span class="file-hint">All files and subfolders will be zipped automatically</span>
             </div>
-            <input id="ug-file" type="file" accept=".zip" style="display:none" />
+            <input id="ug-file" type="file" multiple style="display:none" />
           </div>
           <div id="ug-status" class="upload-status" style="display:none"></div>
         </div>
@@ -276,15 +298,19 @@
             <input id="um-modpack-title" type="text" placeholder="e.g. Cool Mod Collection" autocomplete="off" />
           </div>
           <div class="setting-group">
-            <label>ZIP File</label>
+            <label for="um-notes">Notes</label>
+            <textarea id="um-notes" placeholder="Optional notes about this modpack…" rows="3" autocomplete="off"></textarea>
+          </div>
+          <div class="setting-group">
+            <label>Modpack Folder</label>
             <div class="file-drop-zone" id="um-drop-zone">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
               </svg>
-              <span id="um-file-label">Click to select ZIP file</span>
-              <span class="file-hint">or drag &amp; drop</span>
+              <span id="um-file-label">Click to select modpack folder</span>
+              <span class="file-hint">All files and subfolders will be zipped automatically</span>
             </div>
-            <input id="um-file" type="file" accept=".zip" style="display:none" />
+            <input id="um-file" type="file" multiple style="display:none" />
           </div>
           <div id="um-status" class="upload-status" style="display:none"></div>
         </div>
@@ -317,6 +343,133 @@
         <div class="settings-actions">
           <button class="modal-btn modal-btn-cancel" id="confirm-cancel">Cancel</button>
           <button class="modal-btn modal-btn-danger" id="confirm-ok">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── EDIT GAME INFO MODAL (title-level) ──────────────── -->
+    <div id="modal-edit-game-info" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="edit-game-info-title">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="edit-game-info-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Edit Game Info
+          </h3>
+          <button class="modal-close" id="edit-game-info-close" aria-label="Close">✕</button>
+        </div>
+        <div class="settings-content">
+          <div class="setting-group">
+            <label for="egi-title">Title</label>
+            <input id="egi-title" type="text" placeholder="Game display name" autocomplete="off" />
+          </div>
+          <div class="setting-group">
+            <label for="egi-appid">AppID</label>
+            <input id="egi-appid" type="number" placeholder="e.g. 730" autocomplete="off" />
+          </div>
+          <div class="setting-group">
+            <label for="egi-title-notes">Game Notes</label>
+            <textarea id="egi-title-notes" placeholder="Game-wide notes…" rows="3" autocomplete="off"></textarea>
+          </div>
+          <div id="egi-status" class="upload-status" style="display:none"></div>
+        </div>
+        <div class="settings-actions">
+          <button class="modal-btn modal-btn-cancel" id="edit-game-info-cancel">Cancel</button>
+          <button class="modal-btn modal-btn-primary" id="edit-game-info-submit">
+            <span id="egi-btn-text">Save Changes</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── EDIT GAME MODAL ─────────────────────────────────── -->
+    <div id="modal-edit-game" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="edit-game-title">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="edit-game-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Edit Game
+          </h3>
+          <button class="modal-close" id="edit-game-close" aria-label="Close">✕</button>
+        </div>
+        <div class="settings-content">
+          <div class="setting-group">
+            <label>UUID</label>
+            <input id="eg-uuid" type="text" readonly disabled style="opacity:0.6;font-family:monospace;font-size:0.78rem" />
+          </div>
+          <div class="setting-group">
+            <label for="eg-title">Title</label>
+            <div class="fuzzy-wrapper">
+              <input id="eg-title" type="text" placeholder="Game display name" autocomplete="off" />
+              <div id="eg-title-suggestions" class="fuzzy-dropdown" style="display:none"></div>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label for="eg-version">Version</label>
+            <input id="eg-version" type="text" placeholder="e.g. 1.0, 2.1.3" autocomplete="off" />
+          </div>
+          <div class="setting-group">
+            <label for="eg-exe">Launch EXE Path</label>
+            <input id="eg-exe" type="text" placeholder="e.g. game.exe or bin/game.exe" autocomplete="off" />
+          </div>
+          <div class="setting-group">
+            <label for="eg-notes">Notes</label>
+            <textarea id="eg-notes" placeholder="Optional notes…" rows="3" autocomplete="off"></textarea>
+          </div>
+          <div id="eg-status" class="upload-status" style="display:none"></div>
+        </div>
+        <div class="settings-actions">
+          <button class="modal-btn modal-btn-cancel" id="edit-game-cancel">Cancel</button>
+          <button class="modal-btn modal-btn-primary" id="edit-game-submit">
+            <span id="eg-btn-text">Save Changes</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── EDIT MODPACK MODAL ─────────────────────────────── -->
+    <div id="modal-edit-modpack" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="edit-modpack-title">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="edit-modpack-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Edit Modpack
+          </h3>
+          <button class="modal-close" id="edit-modpack-close" aria-label="Close">✕</button>
+        </div>
+        <div class="settings-content">
+          <div class="setting-group">
+            <label>UUID</label>
+            <input id="em-uuid" type="text" readonly disabled style="opacity:0.6;font-family:monospace;font-size:0.78rem" />
+          </div>
+          <div class="setting-group">
+            <label for="em-game-title">Game Title</label>
+            <div class="fuzzy-wrapper">
+              <input id="em-game-title" type="text" placeholder="Parent game title" autocomplete="off" />
+              <div id="em-game-title-suggestions" class="fuzzy-dropdown" style="display:none"></div>
+            </div>
+            <span class="hint">Type to search existing games or enter a new title.</span>
+          </div>
+          <div class="setting-group">
+            <label for="em-modpack-title">Modpack Title</label>
+            <input id="em-modpack-title" type="text" placeholder="Modpack display name" autocomplete="off" />
+          </div>
+          <div class="setting-group">
+            <label for="em-notes">Notes</label>
+            <textarea id="em-notes" placeholder="Optional notes…" rows="3" autocomplete="off"></textarea>
+          </div>
+          <div id="em-status" class="upload-status" style="display:none"></div>
+        </div>
+        <div class="settings-actions">
+          <button class="modal-btn modal-btn-cancel" id="edit-modpack-cancel">Cancel</button>
+          <button class="modal-btn modal-btn-primary" id="edit-modpack-submit">
+            <span id="em-btn-text">Save Changes</span>
+          </button>
         </div>
       </div>
     </div>
