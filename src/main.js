@@ -24,6 +24,11 @@ let modpackUploadFilePath = null;
 // Modal Action states
 let confirmAction = null; // Callback for delete confirmation
 
+// ─── UPLOAD TRAY STATE ─────────────────────────────────
+// Each entry: { id, label, type, sent, total, status: 'uploading'|'done'|'error', error }
+let uploadTrayItems = {};
+let uploadTrayCollapsed = false;
+
 // UI Elements Cache
 const el = {
   connStatus: document.getElementById("conn-status"),
@@ -97,12 +102,20 @@ const el = {
   diskUsageValue: document.getElementById("disk-usage-value"),
   diskUsageBarFill: document.getElementById("disk-usage-bar-fill"),
   diskUsageDetails: document.getElementById("disk-usage-details"),
+
+  // Upload Tray
+  uploadTray: document.getElementById("upload-tray"),
+  uploadTrayHeader: document.getElementById("upload-tray-header"),
+  uploadTrayBody: document.getElementById("upload-tray-body"),
+  uploadTrayBadge: document.getElementById("upload-tray-badge"),
+  uploadTrayChevron: document.getElementById("upload-tray-chevron"),
 };
 
 // Start App
 window.addEventListener("DOMContentLoaded", () => {
   initSettings();
   initEventListeners();
+  initUploadTray();
 
   // Prevent default drag and drop behavior across window
   window.addEventListener("dragover", e => e.preventDefault(), false);
@@ -662,28 +675,42 @@ async function handleGameUpload() {
     return;
   }
 
-  setUploadLoading(el.ugStatus, el.ugBtnText, "Uploading…");
+  const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const label = `${title} v${version}`;
+  const filePath = gameUploadFilePath;
 
-  try {
-    const cleanUrl = serverUrl.replace(/\/$/, "");
-    await invoke("upload_game", {
-      serverUrl: cleanUrl,
-      adminKey,
-      title,
-      version,
-      launchExe,
-      filePath: gameUploadFilePath,
-    });
+  // Register in tray and dismiss modal immediately
+  trayAddItem(uploadId, label, "game");
+  hideModal(el.modalUploadGame);
+  resetGameUploadForm();
 
-    showToast(`Successfully uploaded ${title} v${version}!`, "success");
-    hideModal(el.modalUploadGame);
-    resetGameUploadForm();
-    refreshCatalog();
-  } catch (err) {
-    console.error(err);
-    setUploadStatus(el.ugStatus, `Upload failed: ${err}`, "error");
-    resetUploadButton(el.ugBtnText, "Upload Game");
-  }
+  // Fire-and-forget background upload
+  (async () => {
+    try {
+      const cleanUrl = serverUrl.replace(/\/$/, "");
+      await invoke("upload_game", {
+        serverUrl: cleanUrl,
+        adminKey,
+        title,
+        version,
+        launchExe,
+        filePath,
+        uploadId,
+      });
+      trayItemDone(uploadId);
+      showToast(`Uploaded ${label}!`, "success");
+      refreshCatalog();
+    } catch (err) {
+      console.error(err);
+      // If we were in 'cancelling' state the stream error is expected
+      if (uploadTrayItems[uploadId]?.status === "cancelling") {
+        trayItemCancelled(uploadId);
+      } else {
+        trayItemError(uploadId, String(err));
+        showToast(`Upload failed: ${label}`, "error");
+      }
+    }
+  })();
 }
 
 async function handleModpackUpload() {
@@ -700,27 +727,41 @@ async function handleModpackUpload() {
     return;
   }
 
-  setUploadLoading(el.umStatus, el.umBtnText, "Uploading…");
+  const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const label = `${modpackTitle} (${gameTitle})`;
+  const filePath = modpackUploadFilePath;
 
-  try {
-    const cleanUrl = serverUrl.replace(/\/$/, "");
-    await invoke("upload_modpack", {
-      serverUrl: cleanUrl,
-      adminKey,
-      gameTitle,
-      modpackTitle,
-      filePath: modpackUploadFilePath,
-    });
+  // Register in tray and dismiss modal immediately
+  trayAddItem(uploadId, label, "modpack");
+  hideModal(el.modalUploadModpack);
+  resetModpackUploadForm();
 
-    showToast(`Successfully uploaded modpack "${modpackTitle}"!`, "success");
-    hideModal(el.modalUploadModpack);
-    resetModpackUploadForm();
-    refreshCatalog();
-  } catch (err) {
-    console.error(err);
-    setUploadStatus(el.umStatus, `Upload failed: ${err}`, "error");
-    resetUploadButton(el.umBtnText, "Upload Modpack");
-  }
+  // Fire-and-forget background upload
+  (async () => {
+    try {
+      const cleanUrl = serverUrl.replace(/\/$/, "");
+      await invoke("upload_modpack", {
+        serverUrl: cleanUrl,
+        adminKey,
+        gameTitle,
+        modpackTitle,
+        filePath,
+        uploadId,
+      });
+      trayItemDone(uploadId);
+      showToast(`Uploaded modpack "${modpackTitle}"!`, "success");
+      refreshCatalog();
+    } catch (err) {
+      console.error(err);
+      // If we were in 'cancelling' state the stream error is expected
+      if (uploadTrayItems[uploadId]?.status === "cancelling") {
+        trayItemCancelled(uploadId);
+      } else {
+        trayItemError(uploadId, String(err));
+        showToast(`Upload failed: ${modpackTitle}`, "error");
+      }
+    }
+  })();
 }
 
 function setUploadStatus(statusEl, text, type) {
@@ -830,6 +871,271 @@ function initEventListeners() {
   // Setup fuzzy search dropdowns
   setupFuzzySearch(el.ugTitle, el.ugTitleSuggestions, getUniqueGameTitles);
   setupFuzzySearch(el.umGameTitle, el.umGameTitleSuggestions, getUniqueGameTitles);
+}
+
+// ─── UPLOAD TRAY ────────────────────────────────────────
+
+function initUploadTray() {
+  // Subscribe to progress events emitted by Rust
+  if (window.__TAURI__ && window.__TAURI__.event) {
+    window.__TAURI__.event.listen("upload://progress", ({ payload }) => {
+      trayItemProgress(payload.id, payload.sent, payload.total);
+    });
+  }
+  // Toggle collapse on header click
+  el.uploadTrayHeader.addEventListener("click", () => {
+    uploadTrayCollapsed = !uploadTrayCollapsed;
+    el.uploadTrayBody.classList.toggle("upload-tray-body--collapsed", uploadTrayCollapsed);
+    el.uploadTrayChevron.classList.toggle("upload-tray-chevron--collapsed", uploadTrayCollapsed);
+  });
+}
+
+function trayAddItem(id, label, type) {
+  uploadTrayItems[id] = { id, label, type, sent: 0, total: 0, status: "uploading" };
+  renderTray();
+  // Auto-expand when a new upload starts
+  uploadTrayCollapsed = false;
+  el.uploadTrayBody.classList.remove("upload-tray-body--collapsed");
+  el.uploadTrayChevron.classList.remove("upload-tray-chevron--collapsed");
+}
+
+function trayItemProgress(id, sent, total) {
+  if (!uploadTrayItems[id]) return;
+  uploadTrayItems[id].sent = sent;
+  uploadTrayItems[id].total = total;
+  updateTrayItem(id);
+  updateTrayHeader();
+}
+
+function trayItemDone(id) {
+  if (!uploadTrayItems[id]) return;
+  uploadTrayItems[id].status = "done";
+  uploadTrayItems[id].sent = uploadTrayItems[id].total;
+  updateTrayItem(id);
+  updateTrayHeader();
+}
+
+function trayItemError(id, errMsg) {
+  if (!uploadTrayItems[id]) return;
+  uploadTrayItems[id].status = "error";
+  uploadTrayItems[id].error = errMsg;
+  updateTrayItem(id);
+  updateTrayHeader();
+}
+
+function trayItemCancelled(id) {
+  if (!uploadTrayItems[id]) return;
+  uploadTrayItems[id].status = "cancelled";
+  updateTrayItem(id);
+  updateTrayHeader();
+}
+
+async function cancelUpload(id) {
+  const item = uploadTrayItems[id];
+  if (!item || item.status !== "uploading") return;
+  uploadTrayItems[id].status = "cancelling";
+  updateTrayItem(id);
+  updateTrayHeader();
+  try {
+    await invoke("cancel_upload", { uploadId: id });
+  } catch (e) {
+    console.error("cancel_upload failed:", e);
+    if (uploadTrayItems[id]?.status === "cancelling") {
+      uploadTrayItems[id].status = "uploading";
+      updateTrayItem(id);
+      updateTrayHeader();
+    }
+  }
+}
+
+function dismissUpload(id) {
+  delete uploadTrayItems[id];
+  const itemEl = document.getElementById(`tray-item-${id}`);
+  if (itemEl) itemEl.remove();
+  if (Object.keys(uploadTrayItems).length === 0) {
+    el.uploadTray.style.display = "none";
+  }
+  updateTrayHeader();
+}
+
+function renderTray() {
+  el.uploadTray.style.display = "block";
+  const id = Object.keys(uploadTrayItems).pop();
+  if (!id) return;
+  const item = uploadTrayItems[id];
+  const itemEl = createTrayItemEl(item);
+  el.uploadTrayBody.appendChild(itemEl);
+  updateTrayHeader();
+}
+
+function createTrayItemEl(item) {
+  const div = document.createElement("div");
+  div.className = "upload-item";
+  div.id = `tray-item-${item.id}`;
+  div.innerHTML = trayItemHTML(item);
+  // Attach button listeners once — never lost because updateTrayItem
+  // updates individual DOM elements instead of replacing innerHTML.
+  const cancelBtn = div.querySelector(`#cancel-btn-${item.id}`);
+  if (cancelBtn) cancelBtn.addEventListener("click", () => cancelUpload(item.id));
+  const dismissBtn = div.querySelector(`#dismiss-btn-${item.id}`);
+  if (dismissBtn) dismissBtn.addEventListener("click", () => dismissUpload(item.id));
+  return div;
+}
+
+function trayItemHTML(item) {
+  const pct = item.total > 0 ? Math.round((item.sent / item.total) * 100) : 0;
+  const isDone       = item.status === "done";
+  const isError      = item.status === "error";
+  const isCancelled  = item.status === "cancelled";
+  const isCancelling = item.status === "cancelling";
+  const isUploading  = item.status === "uploading";
+
+  // Progress bar class
+  const fillClass = isDone
+    ? "upload-item-progress-fill upload-item-progress-fill--done"
+    : isError
+    ? "upload-item-progress-fill upload-item-progress-fill--error"
+    : isCancelled
+    ? "upload-item-progress-fill upload-item-progress-fill--cancelled"
+    : isCancelling
+    ? "upload-item-progress-fill upload-item-progress-fill--cancelling"
+    : item.total === 0
+    ? "upload-item-progress-fill upload-item-progress-fill--indeterminate"
+    : "upload-item-progress-fill";
+
+  const fillStyle = (!isDone && !isError && !isCancelled && !isCancelling && item.total > 0)
+    ? `style="width:${pct}%"`
+    : "";
+
+  // Status line
+  let statusText;
+  if (isDone) {
+    statusText = `<span class="upload-item-status upload-item-status--done">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      Done
+    </span>`;
+  } else if (isError) {
+    statusText = `<span class="upload-item-status upload-item-status--error">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Failed
+    </span>`;
+  } else if (isCancelled) {
+    statusText = `<span class="upload-item-status upload-item-status--cancelled">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      Cancelled
+    </span>`;
+  } else if (isCancelling) {
+    statusText = `<span class="upload-item-status upload-item-status--cancelling">
+      <svg class="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      Cancelling…
+    </span>`;
+  } else {
+    const sentStr = item.total > 0
+      ? `${formatBytes(item.sent)} / ${formatBytes(item.total)} (${pct}%)`
+      : "Preparing…";
+    statusText = `<span class="upload-item-status">${sentStr}</span>`;
+  }
+
+  // Both buttons rendered; one hidden via inline style. updateTrayItem swaps visibility.
+  const actionBtns = `
+    <button class="upload-item-cancel" id="cancel-btn-${item.id}" title="Cancel upload" style="${isUploading ? '' : 'display:none'}">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      Cancel
+    </button>
+    <button class="upload-item-dismiss" id="dismiss-btn-${item.id}" title="Dismiss" style="${isUploading ? 'display:none' : ''}">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>`;
+
+  return `
+    <div class="upload-item-header">
+      <span class="upload-item-name" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
+      <span class="upload-item-type upload-item-type--${item.type}">${item.type === "game" ? "Game" : "Mod"}</span>
+      ${actionBtns}
+    </div>
+    <div class="upload-item-progress-track">
+      <div id="fill-${item.id}" class="${fillClass}" ${fillStyle}></div>
+    </div>
+    <span id="status-${item.id}">${statusText}</span>
+  `;
+}
+
+function updateTrayItem(id) {
+  const itemEl = document.getElementById(`tray-item-${id}`);
+  if (!itemEl) return;
+  const item = uploadTrayItems[id];
+  if (!item) return;
+  const s = item.status;
+
+  // Update item border class
+  itemEl.className = "upload-item"
+    + (s === "done"      ? " upload-item--done"      : "")
+    + (s === "error"     ? " upload-item--error"     : "")
+    + (s === "cancelled" ? " upload-item--cancelled" : "");
+
+  // Update progress fill
+  const fill = document.getElementById(`fill-${id}`);
+  if (fill) {
+    const pct = item.total > 0 ? Math.round((item.sent / item.total) * 100) : 0;
+    const fillClass = s === "done"
+      ? "upload-item-progress-fill upload-item-progress-fill--done"
+      : s === "error"
+      ? "upload-item-progress-fill upload-item-progress-fill--error"
+      : s === "cancelled"
+      ? "upload-item-progress-fill upload-item-progress-fill--cancelled"
+      : s === "cancelling"
+      ? "upload-item-progress-fill upload-item-progress-fill--cancelling"
+      : item.total === 0
+      ? "upload-item-progress-fill upload-item-progress-fill--indeterminate"
+      : "upload-item-progress-fill";
+    fill.className = fillClass;
+    if (s === "uploading" && item.total > 0) {
+      fill.style.width = `${pct}%`;
+    } else {
+      fill.style.width = "";
+    }
+  }
+
+  // Update status text
+  const statusEl = document.getElementById(`status-${id}`);
+  if (statusEl) {
+    const pct = item.total > 0 ? Math.round((item.sent / item.total) * 100) : 0;
+    if (s === "done") {
+      statusEl.className = "upload-item-status upload-item-status--done";
+      statusEl.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Done`;
+    } else if (s === "error") {
+      statusEl.className = "upload-item-status upload-item-status--error";
+      statusEl.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Failed`;
+    } else if (s === "cancelled") {
+      statusEl.className = "upload-item-status upload-item-status--cancelled";
+      statusEl.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Cancelled`;
+    } else if (s === "cancelling") {
+      statusEl.className = "upload-item-status upload-item-status--cancelling";
+      statusEl.innerHTML = `<svg class="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Cancelling…`;
+    } else {
+      statusEl.className = "upload-item-status";
+      const sentStr = item.total > 0
+        ? `${formatBytes(item.sent)} / ${formatBytes(item.total)} (${pct}%)`
+        : "Preparing…";
+      statusEl.textContent = sentStr;
+    }
+  }
+
+  // Swap button visibility: cancel only while uploading, dismiss otherwise
+  const cancelBtn = document.getElementById(`cancel-btn-${id}`);
+  const dismissBtn = document.getElementById(`dismiss-btn-${id}`);
+  const showCancel = s === "uploading";
+  if (cancelBtn) cancelBtn.style.display = showCancel ? "" : "none";
+  if (dismissBtn) dismissBtn.style.display = showCancel ? "none" : "";
+}
+
+function updateTrayHeader() {
+  const items = Object.values(uploadTrayItems);
+  const active = items.filter(i => i.status === "uploading" || i.status === "cancelling").length;
+  const total = items.length;
+  el.uploadTrayBadge.textContent = total;
+  el.uploadTrayBadge.className = active === 0 && total > 0
+    ? "upload-tray-badge upload-tray-badge--done"
+    : "upload-tray-badge";
 }
 
 // ─── UTILITIES & HELPERS ────────────────────────────────
