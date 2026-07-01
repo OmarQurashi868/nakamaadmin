@@ -35,20 +35,12 @@
               </svg>
             </button>
 
-            <!-- Upload game -->
-            <button id="btn-upload-game" class="header-upload-btn" title="Upload game">
+            <!-- Upload new game -->
+            <button id="btn-upload-game" class="header-upload-btn" title="Upload new game">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
-              Upload Game
-            </button>
-
-            <!-- Upload modpack -->
-            <button id="btn-upload-modpack" class="header-upload-btn header-upload-btn--mod" title="Upload modpack">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              Upload Modpack
+              Upload New Game
             </button>
 
             <!-- Settings gear -->
@@ -149,6 +141,12 @@
                     </svg>
                     Versions
                   </h3>
+                  <button id="btn-upload-version" class="btn-sm-accent" title="Upload new version">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Upload Version
+                  </button>
                 </div>
                 <div id="versions-list" class="entry-list"></div>
               </section>
@@ -162,6 +160,12 @@
                     </svg>
                     Modpacks
                   </h3>
+                  <button id="btn-upload-modpack-section" class="btn-sm-accent btn-sm-accent--mod" title="Upload modpack">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Upload Modpack
+                  </button>
                 </div>
                 <div id="modpacks-list" class="entry-list"></div>
               </section>
@@ -207,15 +211,16 @@
     <div id="modal-upload-game" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="upload-game-title">
       <div class="modal-content modal-content--wide">
         <div class="modal-header">
-          <h3 id="upload-game-title">
+          <h3>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            Upload Game
+            <span id="upload-game-title">Upload New Game</span>
           </h3>
           <button class="modal-close" id="upload-game-close" aria-label="Close">✕</button>
         </div>
         <div class="settings-content">
+          <div id="ug-status" class="upload-status" style="display:none"></div>
           <!-- Title with fuzzy search -->
           <div class="setting-group">
             <label for="ug-title">Game Title</label>
@@ -241,11 +246,11 @@
             <label for="ug-appid">AppID</label>
             <input id="ug-appid" type="number" placeholder="e.g. 730" autocomplete="off" />
           </div>
-          <div class="setting-group">
+          <div class="setting-group" id="ug-title-notes-group">
             <label for="ug-notes">Game Notes</label>
             <textarea id="ug-title-notes" placeholder="Game-wide notes (shared across all versions)…" rows="2" autocomplete="off"></textarea>
           </div>
-          <div class="setting-group">
+          <div class="setting-group" id="ug-version-notes-group">
             <label for="ug-notes-version">Version Notes</label>
             <textarea id="ug-notes" placeholder="Notes for this specific version…" rows="2" autocomplete="off"></textarea>
           </div>
@@ -260,12 +265,11 @@
             </div>
             <input id="ug-file" type="file" multiple style="display:none" />
           </div>
-          <div id="ug-status" class="upload-status" style="display:none"></div>
         </div>
         <div class="settings-actions">
           <button class="modal-btn modal-btn-cancel" id="upload-game-cancel">Cancel</button>
           <button class="modal-btn modal-btn-save" id="upload-game-submit">
-            <span id="ug-btn-text">Upload Game</span>
+            <span id="ug-btn-text">Upload New Game</span>
           </button>
         </div>
       </div>

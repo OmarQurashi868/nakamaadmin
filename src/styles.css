@@ -562,6 +562,33 @@ body {
   color: var(--c-text-2);
 }
 
+.btn-sm-accent {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--c-accent);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--c-accent);
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-sm-accent:hover {
+  background: var(--c-accent);
+  color: #fff;
+}
+.btn-sm-accent--mod {
+  border-color: var(--c-warning);
+  color: var(--c-warning);
+}
+.btn-sm-accent--mod:hover {
+  background: var(--c-warning);
+  color: #000;
+}
+
 /* ─── ENTRY LIST & ROWS ─────────────────────────────── */
 
 .entry-list {

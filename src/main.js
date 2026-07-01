@@ -21,6 +21,9 @@ let diskQuota = { total_bytes: 0, used_bytes: 0 };
 let gameUploadFolder = null;
 let modpackUploadFolder = null;
 
+// Upload mode: 'new' = new game from header, 'version' = new version for existing game
+let uploadGameMode = "new";
+
 // Modal Action states
 let confirmAction = null; // Callback for delete confirmation
 
@@ -42,7 +45,10 @@ const el = {
   btnRefresh: document.getElementById("btn-refresh"),
   btnSettings: document.getElementById("btn-settings"),
   btnUploadGame: document.getElementById("btn-upload-game"),
-  btnUploadModpack: document.getElementById("btn-upload-modpack"),
+  btnUploadVersion: document.getElementById("btn-upload-version"),
+  btnUploadModpackSection: document.getElementById("btn-upload-modpack-section"),
+  ugTitleNotesGroup: document.getElementById("ug-title-notes-group"),
+  ugVersionNotesGroup: document.getElementById("ug-version-notes-group"),
   sidebarSearch: document.getElementById("sidebar-search"),
   gameList: document.getElementById("game-list"),
   sidebarLoading: document.getElementById("sidebar-loading"),
@@ -470,6 +476,9 @@ function renderGameDetails(title) {
   el.btnEditGameInfo.onclick = () => openEditGameInfo(title);
   // Wire delete game button
   el.btnDeleteAllGame.onclick = () => { confirmDeleteAllGame(title); };
+  // Wire section upload buttons
+  el.btnUploadVersion.onclick = () => openUploadVersion(title);
+  el.btnUploadModpackSection.onclick = () => openUploadModpackForGame(title);
 
   // Render Versions List
   el.versionsList.innerHTML = "";
@@ -1070,6 +1079,12 @@ async function handleGameUpload() {
     return;
   }
 
+  // Block duplicate game names when uploading a new game
+  if (uploadGameMode === "new" && gamesGrouped[title]) {
+    setUploadStatus(el.ugStatus, `Game "${title}" already exists. Select it in the sidebar and use "Upload Version" to add a new version.`, "error");
+    return;
+  }
+
   if (!gameUploadFolder) {
     setUploadStatus(el.ugStatus, "Please select a game folder.", "error");
     return;
@@ -1215,22 +1230,71 @@ function resetUploadButton(btnEl, text) {
   btnEl.disabled = false;
 }
 
-function resetGameUploadForm() {
-  el.ugTitle.value = "";
+function resetGameUploadForm(mode = "new", gameTitle = null) {
+  uploadGameMode = mode;
+
+  if (mode === "version" && gameTitle) {
+    // Pre-fill from existing game data
+    const entry = gamesGrouped[gameTitle];
+    const firstVer = entry?.versions[0] || {};
+    el.ugTitle.value = gameTitle;
+    el.ugTitle.readOnly = true;
+    el.ugTitle.style.opacity = "0.7";
+    el.ugAppId.value = firstVer.app_id || "";
+    el.ugAppId.readOnly = true;
+    el.ugAppId.style.opacity = "0.7";
+    el.ugExe.value = firstVer.launch_exe || "";
+    el.ugExe.readOnly = false;
+    el.ugExe.style.opacity = "";
+    el.ugTitleNotes.value = "";
+    // Show version notes, hide game notes
+    el.ugTitleNotesGroup.style.display = "none";
+    el.ugVersionNotesGroup.style.display = "";
+    el.ugBtnText.textContent = "Upload Version";
+    // Update modal title
+    document.getElementById("upload-game-title").textContent = "Upload Version";
+    // Update fuzzy hint
+    el.ugTitle.parentElement.nextElementSibling.textContent = "Auto-filled from selected game.";
+  } else {
+    // New game mode
+    el.ugTitle.value = "";
+    el.ugTitle.readOnly = false;
+    el.ugTitle.style.opacity = "";
+    el.ugAppId.value = "";
+    el.ugAppId.readOnly = false;
+    el.ugAppId.style.opacity = "";
+    el.ugExe.value = "";
+    el.ugExe.readOnly = false;
+    el.ugExe.style.opacity = "";
+    el.ugTitleNotes.value = "";
+    // Show game notes, hide version notes
+    el.ugTitleNotesGroup.style.display = "";
+    el.ugVersionNotesGroup.style.display = "none";
+    el.ugBtnText.textContent = "Upload New Game";
+    document.getElementById("upload-game-title").textContent = "Upload New Game";
+    el.ugTitle.parentElement.nextElementSibling.textContent = "Enter a title.";
+  }
+
   el.ugVersion.value = "";
-  el.ugExe.value = "";
-  el.ugAppId.value = "";
-  el.ugTitleNotes.value = "";
   el.ugNotes.value = "";
   gameUploadFolder = null;
   el.ugFileLabel.textContent = "Click to select game folder";
   el.ugDropZone.className = "file-drop-zone";
   el.ugStatus.style.display = "none";
-  resetUploadButton(el.ugBtnText, "Upload Game");
+  el.uploadGameSubmit.disabled = false;
+  resetUploadButton(el.ugBtnText, el.ugBtnText.textContent);
 }
 
-function resetModpackUploadForm() {
-  el.umGameTitle.value = "";
+function resetModpackUploadForm(gameTitle = null) {
+  if (gameTitle) {
+    el.umGameTitle.value = gameTitle;
+    el.umGameTitle.readOnly = true;
+    el.umGameTitle.style.opacity = "0.7";
+  } else {
+    el.umGameTitle.value = "";
+    el.umGameTitle.readOnly = false;
+    el.umGameTitle.style.opacity = "";
+  }
   el.umModpackTitle.value = "";
   el.umNotes.value = "";
   modpackUploadFolder = null;
@@ -1238,6 +1302,17 @@ function resetModpackUploadForm() {
   el.umDropZone.className = "file-drop-zone";
   el.umStatus.style.display = "none";
   resetUploadButton(el.umBtnText, "Upload Modpack");
+}
+
+// Open upload dialogs from game detail section headers
+function openUploadVersion(gameTitle) {
+  resetGameUploadForm("version", gameTitle);
+  showModal(el.modalUploadGame);
+}
+
+function openUploadModpackForGame(gameTitle) {
+  resetModpackUploadForm(gameTitle);
+  showModal(el.modalUploadModpack);
 }
 
 // ─── EVENT LISTENERS ───────────────────────────────────
@@ -1268,9 +1343,9 @@ function initEventListeners() {
   // Sidebar filter
   el.sidebarSearch.addEventListener("input", () => renderSidebar());
 
-  // Upload Game Button & Modal
+  // Upload Game Button & Modal (header — always new game)
   el.btnUploadGame.onclick = () => {
-    resetGameUploadForm();
+    resetGameUploadForm("new");
     showModal(el.modalUploadGame);
   };
   el.uploadGameClose.onclick = () => hideModal(el.modalUploadGame);
@@ -1280,22 +1355,22 @@ function initEventListeners() {
   el.ugExe.onclick = () => pickLaunchExe();
   el.uploadGameSubmit.onclick = () => handleGameUpload();
 
-  // Auto-fill title_notes when game title is filled from existing game
-  el.ugTitle.addEventListener("change", () => {
+  // Real-time duplicate check when typing game title in "new" mode
+  const checkDuplicateTitle = () => {
+    if (uploadGameMode !== "new") return;
     const t = el.ugTitle.value.trim();
     if (t && gamesGrouped[t]) {
-      const firstVer = gamesGrouped[t].versions[0];
-      if (firstVer && firstVer.title_notes && !el.ugTitleNotes.value.trim()) {
-        el.ugTitleNotes.value = firstVer.title_notes;
-      }
+      setUploadStatus(el.ugStatus, `Game "${t}" already exists. Select it in the sidebar and use "Upload Version" to add a new version.`, "error");
+      el.uploadGameSubmit.disabled = true;
+    } else {
+      el.ugStatus.style.display = "none";
+      el.uploadGameSubmit.disabled = false;
     }
-  });
-
-  // Upload Modpack Button & Modal
-  el.btnUploadModpack.onclick = () => {
-    resetModpackUploadForm();
-    showModal(el.modalUploadModpack);
   };
+  el.ugTitle.addEventListener("input", checkDuplicateTitle);
+  el.ugTitle.addEventListener("change", checkDuplicateTitle);
+
+  // Upload Modpack modal wiring (button click handled in renderGameDetails)
   el.uploadModpackClose.onclick = () => hideModal(el.modalUploadModpack);
   el.uploadModpackCancel.onclick = () => hideModal(el.modalUploadModpack);
   el.umDropZone.onclick = () => pickModpackFolder();
