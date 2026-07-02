@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags: ['*']
 
 concurrency:
   group: release-${{ github.sha }}
@@ -18,13 +18,13 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: nakama-admin-windows-exe
-            path: nakama-admin.exe
+            artifact: NakamaAdmin-windows-exe
+            path: NakamaAdmin.exe
             build_args: --bundles nsis
 
           - os: ubuntu-latest
-            artifact: nakama-admin-linux-appimage
-            path: nakama-admin.AppImage
+            artifact: NakamaAdmin-linux-appimage
+            path: NakamaAdmin.AppImage
             build_args: --bundles appimage
 
     runs-on: ${{ matrix.os }}
@@ -63,14 +63,14 @@ jobs:
       - name: Prepare artifact (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: cp src-tauri/target/release/nakama-admin.exe nakama-admin.exe
+        run: cp src-tauri/target/release/nakama-admin.exe NakamaAdmin.exe
 
       - name: Prepare artifact (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           appimage=$(ls src-tauri/target/release/bundle/appimage/*.AppImage | head -1)
-          cp "$appimage" nakama-admin.AppImage
+          cp "$appimage" NakamaAdmin.AppImage
 
       - uses: actions/upload-artifact@v4
         with:
@@ -90,17 +90,13 @@ jobs:
       - name: Show artifacts
         run: find artifacts -type f -ls
 
-      - name: Set tag
-        id: tag
-        run: echo "name=build-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-
       # ponytail: softprops/action-gh-release upserts — safe on re-run
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.name }}
-          name: "Build ${{ steps.tag.outputs.name }}"
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           body: |
-            Automated build from commit `${{ github.sha }}` on branch `${{ github.ref_name }}`.
+            Release `${{ github.ref_name }}` from commit `${{ github.sha }}`.
           files: artifacts/**/*
           draft: false
           prerelease: true
