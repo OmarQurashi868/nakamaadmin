@@ -1,6 +1,6 @@
 # NakamaAdmin
 
-NakamaAdmin is a lightweight desktop client built on Tauri, Rust, and Vanilla HTML/CSS/JS. It provides a complete administrative control panel for NakamaServer, styled with an elegant dark theme based on the Obsidian design language.
+NakamaAdmin is a lightweight desktop client built on Tauri, Rust, and Vanilla HTML/CSS/JS. It provides a complete administrative control panel for [NakamaServer](https://github.com/OmarQurashi868/nakamaserver), styled with an elegant dark theme based on the Obsidian design language.
 
 ## Architecture
 
